@@ -643,7 +643,7 @@ def _accessible_libraries_iter(user, org=None):
         libraries = [] if org == '' else modulestore().get_libraries(org=org)
     else:
         libraries = modulestore().get_library_summaries()
-
+    # No need to worry about ErrorBlocks - split's get_libraries() never returns them.
     return (lib for lib in libraries if has_studio_read_access(user, lib.location.library_key))
 
 

@@ -6,7 +6,7 @@ Tests of student.roles
 import ddt
 from django.test import TestCase
 from opaque_keys.edx.keys import CourseKey
-from opaque_keys.edx.locator import LibraryLocator, LibraryLocatorV2
+from opaque_keys.edx.locator import LibraryLocator
 
 from common.djangoapps.student.roles import (
     CourseAccessRole,
@@ -24,8 +24,8 @@ from common.djangoapps.student.roles import (
     OrgInstructorRole,
     OrgStaffRole,
     RoleCache,
-    get_role_cache_course_key,
-    ROLE_CACHE_UNGROUPED_COURSES_KEY
+    get_role_cache_key_for_course,
+    ROLE_CACHE_UNGROUPED_ROLES__KEY
 )
 from common.djangoapps.student.role_helpers import get_course_roles, has_staff_roles
 from common.djangoapps.student.tests.factories import AnonymousUserFactory, InstructorFactory, StaffFactory, UserFactory
@@ -238,44 +238,27 @@ class RoleCacheTestCase(TestCase):  # lint-amnesty, pylint: disable=missing-clas
         cache = RoleCache(self.user)
         assert not cache.has_role(*target)
 
-    def test_get_role_cache_course_key_for_course_object_gets_string(self):
+    def test_get_role_cache_key_for_course_for_course_object_gets_string(self):
         """
-        Given a valid course key object, get_role_cache_course_key
+        Given a valid course key object, get_role_cache_key_for_course
         should return the string representation of the key.
         """
         course_string = 'edX/toy/2012_Fall'
         key = CourseKey.from_string(course_string)
-        key = get_role_cache_course_key(key)
+        key = get_role_cache_key_for_course(key)
         assert key == course_string
 
-    def test_get_role_cache_course_key_for_undefined_object_returns_default(self):
+    def test_get_role_cache_key_for_course_for_undefined_object_returns_default(self):
         """
-        Given a value None, get_role_cache_course_key
+        Given a value None, get_role_cache_key_for_course
         should return the default key for ungrouped courses.
         """
-        key = get_role_cache_course_key(None)
-        assert key == ROLE_CACHE_UNGROUPED_COURSES_KEY
-
-    def test_get_role_cache_course_key_for_undefined_attr_html_id(self):
-        """
-        Given an object without `html_id`, like LibraryLocatorV2, get_role_cache_course_key
-        should return the default key for ungrouped courses.
-        """
-        class CourseIdWithoutHtmlId:
-            test = True
-        locator = LibraryLocatorV2('edX', 'toy')
-        assert getattr(locator, 'html_id', None) is None
-        test_obj = CourseIdWithoutHtmlId()
-
-        key = get_role_cache_course_key(locator)
-        assert key == ROLE_CACHE_UNGROUPED_COURSES_KEY
-
-        key = get_role_cache_course_key(test_obj)
-        assert key == ROLE_CACHE_UNGROUPED_COURSES_KEY
+        key = get_role_cache_key_for_course(None)
+        assert key == ROLE_CACHE_UNGROUPED_ROLES__KEY
 
     def test_role_cache_get_roles_set(self):
         """
-        Test that the RoleCache.get_all_roles_set() method returns a flat set of all roles for a user
+        Test that the RoleCache.all_roles_set getter method returns a flat set of all roles for a user
         and that the ._roles attribute is the same as the set to avoid legacy behavior being broken.
         """
         lib0 = LibraryLocator.from_string('library-v1:edX+quizzes')
@@ -294,17 +277,17 @@ class RoleCacheTestCase(TestCase):  # lint-amnesty, pylint: disable=missing-clas
         assert cache.has_role('instructor', course0, 'edX')
         assert cache.has_role('instructor', course1, 'edX')
 
-        assert len(cache.get_all_roles_set()) == 3
-        roles_set = cache.get_all_roles_set()
+        assert len(cache.all_roles_set) == 3
+        roles_set = cache.all_roles_set
         for role in roles_set:
             assert role.course_id.course in ('quizzes', 'toy2', 'toy')
 
         assert roles_set == cache._roles  # pylint: disable=protected-access
 
-    def test_role_cache_get_roles_by_course_id(self):
+    def test_role_cache_roles_by_course_id(self):
         """
-        Test that the RoleCache.get_roles_by_course_id_dict() method returns a dictionary of roles for a user
-        that are grouped by course_id or if ungrouped by the ROLE_CACHE_UNGROUPED_COURSES_KEY.
+        Test that the RoleCache.roles_by_course_id getter method returns a dictionary of roles for a user
+        that are grouped by course_id or if ungrouped by the ROLE_CACHE_UNGROUPED_ROLES__KEY.
         """
         lib0 = LibraryLocator.from_string('library-v1:edX+quizzes')
         course0 = CourseKey.from_string('edX/toy/2012_Summer')
@@ -320,9 +303,9 @@ class RoleCacheTestCase(TestCase):  # lint-amnesty, pylint: disable=missing-clas
         role_org_staff.add_users(self.user)
 
         cache = RoleCache(self.user)
-        roles_dict = cache.get_roles_by_course_id()
+        roles_dict = cache.roles_by_course_id
         assert len(roles_dict) == 4
-        assert roles_dict.get(ROLE_CACHE_UNGROUPED_COURSES_KEY).pop().role == 'staff'
+        assert roles_dict.get(ROLE_CACHE_UNGROUPED_ROLES__KEY).pop().role == 'staff'
         assert roles_dict.get('library-v1:edX+quizzes').pop().course_id.course == 'quizzes'
         assert roles_dict.get('edX/toy/2012_Summer').pop().course_id.course == 'toy'
         assert roles_dict.get('edX/toy2/2013_Fall').pop().course_id.course == 'toy2'

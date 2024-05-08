@@ -4,6 +4,7 @@ adding users, removing users, and listing members
 """
 
 
+from collections import defaultdict
 import logging
 from abc import ABCMeta, abstractmethod
 from contextlib import contextmanager
@@ -23,7 +24,7 @@ REGISTERED_ACCESS_ROLES = {}
 ACCESS_ROLES_INHERITANCE = {}
 
 # The key used to store roles for a user in the cache that do not belong to a course or do not have a course id.
-ROLE_CACHE_UNGROUPED_COURSES_KEY = 'ungrouped'
+ROLE_CACHE_UNGROUPED_ROLES__KEY = 'ungrouped'
 
 
 def register_access_role(cls):
@@ -62,43 +63,48 @@ def strict_role_checking():
     ACCESS_ROLES_INHERITANCE.update(OLD_ACCESS_ROLES_INHERITANCE)
 
 
-def get_role_cache_course_key(course_id=None):
+def get_role_cache_key_for_course(course_key=None):
     """
     Get the cache key for the course key.
     """
-    default = ROLE_CACHE_UNGROUPED_COURSES_KEY
-    if not course_id:
-        return default
-    if not getattr(course_id, 'html_id', False):
-        return default
-    html_id = course_id.html_id()
-    if not html_id:
-        return default
-
-    return html_id
+    return str(course_key) if course_key else ROLE_CACHE_UNGROUPED_ROLES__KEY
 
 
 class BulkRoleCache:  # lint-amnesty, pylint: disable=missing-class-docstring
+    """
+    This class provides a caching mechanism for roles grouped by users and courses,
+    using a nested dictionary structure to optimize lookup performance. The cache structure is designed as follows:
+
+    {
+        user_id_1: {
+            course_id_1: {role1, role2, role3},  # Set of roles associated with course_id_1
+            course_id_2: {role4, role5, role6},  # Set of roles associated with course_id_2
+            [ROLE_CACHE_UNGROUPED_ROLES_KEY]: {role7, role8}  # Set of roles not tied to any specific course or library
+        },
+        user_id_2: { ... }  # Similar structure for another user
+    }
+
+    - Each top-level dictionary entry keys by `user_id` to access role data for a specific user.
+    - Nested within each user's dictionary, entries are keyed by `course_id` grouping roles by course.
+    - The special key `ROLE_CACHE_UNGROUPED_ROLES_KEY` (a constant defined above)
+        stores roles that are not associated with any specific course or library.
+    """
+
     CACHE_NAMESPACE = "student.roles.BulkRoleCache"
     CACHE_KEY = 'roles_by_user'
 
     @classmethod
     def prefetch(cls, users):  # lint-amnesty, pylint: disable=missing-function-docstring
-        roles_by_user = {}
+        roles_by_user = defaultdict(lambda: defaultdict(set))
         get_cache(cls.CACHE_NAMESPACE)[cls.CACHE_KEY] = roles_by_user
 
         for role in CourseAccessRole.objects.filter(user__in=users).select_related('user'):
             user_id = role.user.id
-            course_id = get_role_cache_course_key(role.course_id)
-            if not roles_by_user.get(user_id):
-                roles_by_user[user_id] = {course_id: set()}
-            if not roles_by_user[user_id].get(course_id):
-                roles_by_user[user_id][course_id] = set()
-            roles_by_user[user_id][course_id].add(role)
+            course_id = get_role_cache_key_for_course(role.course_id)
 
-            if not roles_by_user.get(course_id):
-                roles_by_user[course_id] = set()
-            roles_by_user[course_id].add(role)
+            # Add role to the set in roles_by_user[user_id][course_id]
+            user_roles_set_for_course = roles_by_user[user_id][course_id]
+            user_roles_set_for_course.add(role)
 
         users_without_roles = [u for u in users if u.id not in roles_by_user]
         for user in users_without_roles:
@@ -116,7 +122,7 @@ class RoleCache:
     don't use `_roles_by_course_id` or `_roles` directly.
     _roles_by_course_id: This is the data structure as saved in the RequestCache.
         It contains all roles for a user as a dict that's keyed by course_id.
-        The key ROLE_CACHE_UNGROUPED_COURSES_KEY is used for all roles
+        The key ROLE_CACHE_UNGROUPED_ROLES__KEY is used for all roles
         that are not associated with a course.
     _roles: This is a set of all roles for a user, ungrouped. It's used for some types of
         lookups and collected from _roles_by_course_id on initialization
@@ -130,7 +136,7 @@ class RoleCache:
             self._roles_by_course_id = {}
             roles = CourseAccessRole.objects.filter(user=user).all()
             for role in roles:
-                course_id = get_role_cache_course_key(role.course_id)
+                course_id = get_role_cache_key_for_course(role.course_id)
                 if not self._roles_by_course_id.get(course_id):
                     self._roles_by_course_id[course_id] = set()
                 self._roles_by_course_id[course_id].add(role)
@@ -145,11 +151,12 @@ class RoleCache:
         """
         return ACCESS_ROLES_INHERITANCE.get(role, set()) | {role}
 
-    # TODO: test that this works as expected
-    def get_all_roles_set(self):
+    @property
+    def all_roles_set(self):
         return self._roles
 
-    def get_roles_by_course_id(self):
+    @property
+    def roles_by_course_id(self):
         return self._roles_by_course_id
 
     def has_role(self, role, course_id, org):
@@ -157,17 +164,12 @@ class RoleCache:
         Return whether this RoleCache contains a role with the specified role
         or a role that inherits from the specified role, course_id and org.
         """
-        res = False
-        course_id_string = get_role_cache_course_key(course_id)
-        course_roles = self._roles_by_course_id.get(course_id_string)
-        if not course_roles:
-            return False
-        res = any(
-            access_role.role in self.get_roles(role) and
-            access_role.org == org
+        course_id_string = get_role_cache_key_for_course(course_id)
+        course_roles = self._roles_by_course_id.get(course_id_string, [])
+        return any(
+            access_role.role in self.get_roles(role) and access_role.org == org
             for access_role in course_roles
         )
-        return res
 
 
 class AccessRole(metaclass=ABCMeta):

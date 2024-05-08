@@ -345,14 +345,11 @@ def get_course_enrollment_info(course_id, include_expired=False):
         return CourseSerializer(course, include_expired=include_expired).data
 
 
-def get_user_roles(username, by_course_id=False):
+def get_user_roles(username):
     """
     Returns a set of all roles that this user has.
     :param username: The id of the selected user.
-    :return: Either a set of all roles for all courses that this user has
-        or a dictionary of course_id to roles with the key
-        ROLE_CACHE_UNGROUPED_COURSES_KEY (see common/djangoapps/student/roles.py)
-        for roles that are not course specific.
+    :return: All roles for all courses that this user has.
     """
     user = _get_user(username)
     return set(get_course_roles(user))
