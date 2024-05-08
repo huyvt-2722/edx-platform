@@ -6,6 +6,7 @@ from __future__ import annotations
 import copy
 
 from unittest.mock import MagicMock, call, patch
+from opaque_keys.edx.keys import UsageKey
 
 import ddt
 from django.test import override_settings
@@ -62,38 +63,48 @@ class TestSearchApi(ModuleStoreTestCase):
             fields={"display_name": "Test Course"},
         )
         course_access, _ = SearchAccess.objects.get_or_create(context_key=self.course.id)
+        self.course_block_key = "block-v1:org1+test_course+test_run+type@course+block@course"
 
         # Create XBlocks
         self.sequential = self.store.create_child(self.user_id, self.course.location, "sequential", "test_sequential")
         self.doc_sequential = {
-            'id': 'block-v1org1test_coursetest_runtypesequentialblocktest_sequential-f702c144',
-            'type': 'course_block',
-            'usage_key': 'block-v1:org1+test_course+test_run+type@sequential+block@test_sequential',
-            'block_id': 'test_sequential',
-            'display_name': 'sequential',
-            'block_type': 'sequential',
-            'context_key': 'course-v1:org1+test_course+test_run',
-            'org': 'org1',
-            'breadcrumbs': [{'display_name': 'Test Course'}],
-            'content': {},
-            'access_id': course_access.id,
+            "id": "block-v1org1test_coursetest_runtypesequentialblocktest_sequential-f702c144",
+            "type": "course_block",
+            "usage_key": "block-v1:org1+test_course+test_run+type@sequential+block@test_sequential",
+            "block_id": "test_sequential",
+            "display_name": "sequential",
+            "block_type": "sequential",
+            "context_key": "course-v1:org1+test_course+test_run",
+            "org": "org1",
+            "breadcrumbs": [
+                {
+                    "display_name": "Test Course",
+                },
+            ],
+            "content": {},
+            "access_id": course_access.id,
         }
         self.store.create_child(self.user_id, self.sequential.location, "vertical", "test_vertical")
         self.doc_vertical = {
-            'id': 'block-v1org1test_coursetest_runtypeverticalblocktest_vertical-e76a10a4',
-            'type': 'course_block',
-            'usage_key': 'block-v1:org1+test_course+test_run+type@vertical+block@test_vertical',
-            'block_id': 'test_vertical',
-            'display_name': 'vertical',
-            'block_type': 'vertical',
-            'context_key': 'course-v1:org1+test_course+test_run',
-            'org': 'org1',
-            'breadcrumbs': [
-                {'display_name': 'Test Course'},
-                {'display_name': 'sequential'}
+            "id": "block-v1org1test_coursetest_runtypeverticalblocktest_vertical-e76a10a4",
+            "type": "course_block",
+            "usage_key": "block-v1:org1+test_course+test_run+type@vertical+block@test_vertical",
+            "block_id": "test_vertical",
+            "display_name": "vertical",
+            "block_type": "vertical",
+            "context_key": "course-v1:org1+test_course+test_run",
+            "org": "org1",
+            "breadcrumbs": [
+                {
+                    "display_name": "Test Course",
+                },
+                {
+                    "display_name": "sequential",
+                    "usage_key": "block-v1:org1+test_course+test_run+type@sequential+block@test_sequential",
+                },
             ],
-            'content': {},
-            'access_id': course_access.id,
+            "content": {},
+            "access_id": course_access.id,
         }
 
         # Create a content library:
@@ -174,6 +185,12 @@ class TestSearchApi(ModuleStoreTestCase):
             expected_docs = [self.doc_sequential]
 
         mock_meilisearch.return_value.index.return_value.update_documents.assert_called_once_with(expected_docs)
+
+    @override_settings(MEILISEARCH_ENABLED=True)
+    def test_no_index_excluded_xblocks(self, mock_meilisearch):
+        api.upsert_xblock_index_doc(UsageKey.from_string(self.course_block_key))
+
+        mock_meilisearch.return_value.index.return_value.update_document.assert_not_called()
 
     @override_settings(MEILISEARCH_ENABLED=True)
     def test_index_xblock_tags(self, mock_meilisearch):

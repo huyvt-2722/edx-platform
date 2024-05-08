@@ -21,6 +21,7 @@ from help_tokens.core import HelpUrlExpert
 from lti_consumer.models import CourseAllowPIISharingInLTIFlag
 from opaque_keys.edx.keys import CourseKey, UsageKey
 from opaque_keys.edx.locator import LibraryLocator
+from openedx.core.lib.teams_config import CONTENT_GROUPS_FOR_TEAMS, TEAM_SCHEME
 from openedx_events.content_authoring.data import DuplicatedXBlockData
 from openedx_events.content_authoring.signals import XBLOCK_DUPLICATED
 from openedx_events.learning.data import CourseNotificationData
@@ -456,7 +457,7 @@ def get_textbooks_url(course_locator) -> str:
     textbooks_url = None
     if use_new_textbooks_page(course_locator):
         mfe_base_url = get_course_authoring_url(course_locator)
-        course_mfe_url = f'{mfe_base_url}/course/{course_locator}/pages-and-resources/textbooks'
+        course_mfe_url = f'{mfe_base_url}/course/{course_locator}/textbooks'
         if mfe_base_url:
             textbooks_url = course_mfe_url
     return textbooks_url
@@ -838,6 +839,9 @@ def get_visibility_partition_info(xblock, course=None):
     for partition in enrollment_user_partitions:
         if len(partition["groups"]) > 1 or any(group["selected"] for group in partition["groups"]):
             selectable_partitions.append(partition)
+
+    team_user_partitions = get_user_partition_info(xblock, schemes=["team"], course=course)
+    selectable_partitions += team_user_partitions
 
     course_key = xblock.scope_ids.usage_id.course_key
     is_library = isinstance(course_key, LibraryLocator)
@@ -1482,7 +1486,8 @@ def get_course_grading(course_key):
         'grading_url': reverse_course_url('grading_handler', course_key),
         'is_credit_course': is_credit_course(course_key),
         'mfe_proctored_exam_settings_url': get_proctored_exam_settings_url(course_key),
-        'course_assignment_lists': dict(course_assignment_lists)
+        'course_assignment_lists': dict(course_assignment_lists),
+        'default_grade_designations': settings.DEFAULT_GRADE_DESIGNATIONS
     }
 
     return grading_context
@@ -2143,6 +2148,12 @@ def get_group_configurations_context(course, store):
             # Add it to the front of the list if it should be shown.
             if should_show_enrollment_track:
                 displayable_partitions.insert(0, partition)
+        elif partition['scheme'] == TEAM_SCHEME:
+            should_show_team_partitions = len(partition['groups']) > 0 and CONTENT_GROUPS_FOR_TEAMS.is_enabled(
+                course_key
+            )
+            if should_show_team_partitions:
+                displayable_partitions.append(partition)
         elif partition['scheme'] != RANDOM_SCHEME:
             # Experiment group configurations are handled explicitly above. We don't
             # want to display their groups twice.
