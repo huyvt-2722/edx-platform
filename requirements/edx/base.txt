@@ -583,6 +583,10 @@ idna==3.7
     #   requests
     #   snowflake-connector-python
     #   yarl
+importlib-metadata==6.11.0
+    # via
+    #   -c requirements/edx/../common_constraints.txt
+    #   -r requirements/edx/kernel.in
 inflection==0.5.1
     # via
     #   drf-spectacular
@@ -1197,6 +1201,8 @@ xss-utils==0.6.0
     # via -r requirements/edx/kernel.in
 yarl==1.9.4
     # via aiohttp
+zipp==3.18.1
+    # via importlib-metadata
 
 # The following packages are considered to be unsafe in a requirements file:
 # setuptools

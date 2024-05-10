@@ -674,6 +674,10 @@ idna==3.7
     #   yarl
 imagesize==1.4.1
     # via sphinx
+importlib-metadata==6.11.0
+    # via
+    #   -c requirements/edx/../common_constraints.txt
+    #   -r requirements/edx/base.txt
 inflection==0.5.1
     # via
     #   -r requirements/edx/base.txt
@@ -1458,6 +1462,10 @@ yarl==1.9.4
     # via
     #   -r requirements/edx/base.txt
     #   aiohttp
+zipp==3.18.1
+    # via
+    #   -r requirements/edx/base.txt
+    #   importlib-metadata
 
 # The following packages are considered to be unsafe in a requirements file:
 # setuptools

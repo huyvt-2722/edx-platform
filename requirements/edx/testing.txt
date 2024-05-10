@@ -740,6 +740,10 @@ idna==3.7
     #   yarl
 import-linter==2.0
     # via -r requirements/edx/testing.in
+importlib-metadata==6.11.0
+    # via
+    #   -c requirements/edx/../common_constraints.txt
+    #   -r requirements/edx/base.txt
 inflection==0.5.1
     # via
     #   -r requirements/edx/base.txt
@@ -1615,6 +1619,10 @@ yarl==1.9.4
     #   -r requirements/edx/base.txt
     #   aiohttp
     #   pact-python
+zipp==3.18.1
+    # via
+    #   -r requirements/edx/base.txt
+    #   importlib-metadata
 
 # The following packages are considered to be unsafe in a requirements file:
 # setuptools
