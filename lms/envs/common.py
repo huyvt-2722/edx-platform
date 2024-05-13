@@ -1076,6 +1076,15 @@ FEATURES = {
     # .. toggle_warning: For consistency, keep the value in sync with the setting of the same name in the LMS and CMS.
     # .. toggle_tickets: https://github.com/openedx/edx-platform/pull/34442
     'ENABLE_BLAKE2B_HASHING': False,
+
+    # .. toggle_name: FEATURES['BADGES_ENABLED']
+    # .. toggle_implementation: DjangoSetting
+    # .. toggle_default: False
+    # .. toggle_description: Set to True to enable badges functionality.
+    # .. toggle_use_cases: open_edx
+    # .. toggle_creation_date: 2024-04-02
+    # .. toggle_target_removal_date: None
+    'BADGES_ENABLED': False,
 }
 
 # Specifies extra XBlock fields that should available when requested via the Course Blocks API
@@ -1148,26 +1157,12 @@ STATUS_MESSAGE_PATH = ENV_ROOT / "status_message.json"
 
 DATABASE_ROUTERS = [
     'openedx.core.lib.django_courseware_routers.StudentModuleHistoryExtendedRouter',
-    'openedx.core.lib.blockstore_api.db_routers.BlockstoreRouter',
     'edx_django_utils.db.read_replica.ReadReplicaRouter',
 ]
 
 ############################ Cache Configuration ###############################
 
 CACHES = {
-    'blockstore': {
-        'KEY_PREFIX': 'blockstore',
-        'KEY_FUNCTION': 'common.djangoapps.util.memcache.safe_key',
-        'LOCATION': ['localhost:11211'],
-        'TIMEOUT': '86400',  # This data should be long-lived for performance, BundleCache handles invalidation
-        'BACKEND': 'django.core.cache.backends.memcached.PyMemcacheCache',
-        'OPTIONS': {
-            'no_delay': True,
-            'ignore_exc': True,
-            'use_pooling': True,
-            'connect_timeout': 0.5
-        }
-    },
     'course_structure_cache': {
         'KEY_PREFIX': 'course_structure',
         'KEY_FUNCTION': 'common.djangoapps.util.memcache.safe_key',
@@ -1694,6 +1689,11 @@ XBLOCK_FS_STORAGE_PREFIX = None
 #     is not defined, use the XBlock class name. Check `xmodule.services.SettingsService`
 #     for more reference.
 XBLOCK_SETTINGS = {}
+
+# .. setting_name: XBLOCK_RUNTIME_V2_EPHEMERAL_DATA_CACHE
+# .. setting_default: default
+# .. setting_description: The django cache key of the cache to use for storing anonymous user state for XBlocks.
+XBLOCK_RUNTIME_V2_EPHEMERAL_DATA_CACHE = 'default'
 
 ############# ModuleStore Configuration ##########
 
@@ -3140,7 +3140,7 @@ INSTALLED_APPS = [
     # User tours
     'lms.djangoapps.user_tours',
 
-    # New (Blockstore-based) XBlock runtime
+    # New (Learning-Core-based) XBlock runtime
     'openedx.core.djangoapps.xblock.apps.LmsXBlockAppConfig',
 
     # Student support tools
@@ -3375,9 +3375,6 @@ INSTALLED_APPS = [
 
     # For edx ace template tags
     'edx_ace',
-
-    # Blockstore
-    'blockstore.apps.bundles',
 
     # MFE API
     'lms.djangoapps.mfe_config_api',
@@ -3675,9 +3672,13 @@ if FEATURES.get('ENABLE_CORS_HEADERS'):
     CORS_ORIGIN_WHITELIST = ()
     CORS_ORIGIN_ALLOW_ALL = False
     CORS_ALLOW_INSECURE = False
-    CORS_ALLOW_HEADERS = corsheaders_default_headers + (
-        'use-jwt-cookie',
-    )
+
+# Set CORS_ALLOW_HEADERS regardless of whether we've enabled ENABLE_CORS_HEADERS
+# because that decision might happen in a later config file. (The headers to
+# allow is an application logic, and not site policy.)
+CORS_ALLOW_HEADERS = corsheaders_default_headers + (
+    'use-jwt-cookie',
+)
 
 # Default cache expiration for the cross-domain proxy HTML page.
 # This is a static page that can be iframed into an external page
@@ -5183,57 +5184,6 @@ RATE_LIMIT_FOR_VIDEO_METADATA_API = '10/minute'
 ########################## MAILCHIMP SETTINGS #################################
 MAILCHIMP_NEW_USER_LIST_ID = ""
 
-########################## BLOCKSTORE #####################################
-
-# .. setting_name: XBLOCK_RUNTIME_V2_EPHEMERAL_DATA_CACHE
-# .. setting_default: default
-# .. setting_description: The django cache key of the cache to use for storing anonymous user state for XBlocks.
-XBLOCK_RUNTIME_V2_EPHEMERAL_DATA_CACHE = 'default'
-
-# .. setting_name: BLOCKSTORE_BUNDLE_CACHE_TIMEOUT
-# .. setting_default: 3000
-# .. setting_description: Maximum time-to-live of cached Bundles fetched from
-#     Blockstore, in seconds. When the values returned from Blockstore have
-#     TTLs of their own (such as signed S3 URLs), the maximum TTL of this cache
-#     must be lower than the minimum TTL of those values.
-#     We use a default of 3000s (50mins) because temporary URLs are often
-#     configured to expire after one hour.
-BLOCKSTORE_BUNDLE_CACHE_TIMEOUT = 3000
-
-# .. setting_name: BUNDLE_ASSET_URL_STORAGE_KEY
-# .. setting_default: None
-# .. setting_description: When this is set, `BUNDLE_ASSET_URL_STORAGE_SECRET` is
-#  set, and `boto3` is installed, this is used as an AWS IAM access key for
-#  generating signed, read-only URLs for blockstore assets stored in S3.
-#  Otherwise, URLs are generated based on the default storage configuration.
-#  See `blockstore.apps.bundles.storage.LongLivedSignedUrlStorage` for details.
-BUNDLE_ASSET_URL_STORAGE_KEY = None
-
-# .. setting_name: BUNDLE_ASSET_URL_STORAGE_SECRET
-# .. setting_default: None
-# .. setting_description: When this is set, `BUNDLE_ASSET_URL_STORAGE_KEY` is
-#  set, and `boto3` is installed, this is used as an AWS IAM secret key for
-#  generating signed, read-only URLs for blockstore assets stored in S3.
-#  Otherwise, URLs are generated based on the default storage configuration.
-#  See `blockstore.apps.bundles.storage.LongLivedSignedUrlStorage` for details.
-BUNDLE_ASSET_URL_STORAGE_SECRET = None
-
-# .. setting_name: BUNDLE_ASSET_STORAGE_SETTINGS
-# .. setting_default: dict, appropriate for file system storage.
-# .. setting_description: When this is set, `BUNDLE_ASSET_URL_STORAGE_KEY` is
-#  set, and `boto3` is installed, this provides the bucket name and location for blockstore assets stored in S3.
-#  See `blockstore.apps.bundles.storage.LongLivedSignedUrlStorage` for details.
-BUNDLE_ASSET_STORAGE_SETTINGS = dict(
-    # Backend storage
-    # STORAGE_CLASS='storages.backends.s3boto3.S3Boto3Storage',
-    # STORAGE_KWARGS=dict(bucket='bundle-asset-bucket', location='/path-to-bundles/'),
-    STORAGE_CLASS='django.core.files.storage.FileSystemStorage',
-    STORAGE_KWARGS=dict(
-        location=MEDIA_ROOT,
-        base_url=MEDIA_URL,
-    ),
-)
-
 SYSLOG_SERVER = ''
 FEEDBACK_SUBMISSION_EMAIL = ''
 GITHUB_REPO_ROOT = '/edx/var/edxapp/data'
@@ -5443,7 +5393,12 @@ SIMPLE_HISTORY_DATE_INDEX = False
 def _should_send_certificate_events(settings):
     return settings.FEATURES['SEND_LEARNING_CERTIFICATE_LIFECYCLE_EVENTS_TO_BUS']
 
+
 #### Event bus producing ####
+
+def _should_send_learning_badge_events(settings):
+    return settings.FEATURES['BADGES_ENABLED']
+
 # .. setting_name: EVENT_BUS_PRODUCER_CONFIG
 # .. setting_default: all events disabled
 # .. setting_description: Dictionary of event_types mapped to dictionaries of topic to topic-related configuration.
@@ -5516,11 +5471,37 @@ EVENT_BUS_PRODUCER_CONFIG = {
         'course-authoring-xblock-lifecycle':
             {'event_key_field': 'xblock_info.usage_key', 'enabled': False},
     },
+    "org.openedx.learning.course.passing.status.updated.v1": {
+        "learning-badges-lifecycle": {
+            "event_key_field": "course_passing_status.course.course_key",
+            "enabled": _should_send_learning_badge_events,
+        },
+    },
+    "org.openedx.learning.ccx.course.passing.status.updated.v1": {
+        "learning-badges-lifecycle": {
+            "event_key_field": "course_passing_status.course.ccx_course_key",
+            "enabled": _should_send_learning_badge_events,
+        },
+    },
 }
 derived_collection_entry('EVENT_BUS_PRODUCER_CONFIG', 'org.openedx.learning.certificate.created.v1',
                          'learning-certificate-lifecycle', 'enabled')
 derived_collection_entry('EVENT_BUS_PRODUCER_CONFIG', 'org.openedx.learning.certificate.revoked.v1',
                          'learning-certificate-lifecycle', 'enabled')
+
+derived_collection_entry(
+    "EVENT_BUS_PRODUCER_CONFIG",
+    "org.openedx.learning.course.passing.status.updated.v1",
+    "learning-badges-lifecycle",
+    "enabled",
+)
+derived_collection_entry(
+    "EVENT_BUS_PRODUCER_CONFIG",
+    "org.openedx.learning.ccx.course.passing.status.updated.v1",
+    "learning-badges-lifecycle",
+    "enabled",
+)
+
 BEAMER_PRODUCT_ID = ""
 
 #### Survey Report ####
