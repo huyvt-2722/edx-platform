@@ -86,6 +86,8 @@ INSTALLED_APPS += ['debug_toolbar']
 MIDDLEWARE += [
     'lms.djangoapps.discussion.django_comment_client.utils.QueryCountDebugMiddleware',
     'debug_toolbar.middleware.DebugToolbarMiddleware',
+    'edx_django_utils.monitoring.InjectDataDogRUMScriptMiddleware',
+
 ]
 
 INTERNAL_IPS = ('127.0.0.1',)
